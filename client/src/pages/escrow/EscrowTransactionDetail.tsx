@@ -49,7 +49,7 @@ export default function EscrowTransactionDetail() {
               <div className="flex items-center gap-4 mb-8">
                 <h1 className="text-2xl font-bold text-foreground">{tx.propertyName}</h1>
                 <Badge className={statusColor[tx.status] || ""}>
-                  {tx.status.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+                  {tx.status.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())}
                 </Badge>
               </div>
 

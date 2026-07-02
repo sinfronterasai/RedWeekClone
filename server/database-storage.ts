@@ -1,6 +1,6 @@
 import { ObjectId } from 'mongodb';
 import { getDb } from "./db";
-import { 
+import {
   type User,
   type InsertUser,
   type Resort,
@@ -14,7 +14,10 @@ import {
   type SiteSetting,
   type InsertSiteSetting,
   type PropertyInquiry,
-  type InsertPropertyInquiry
+  type InsertPropertyInquiry,
+  type EscrowTransaction,
+  type InsertEscrowTransaction,
+  type EscrowDashboardStats
 } from "@shared/schema";
 import { IStorage } from "./storage";
 

@@ -23,6 +23,8 @@ interface MockTx {
 const emptyTx = (): MockTx => ({
   propertyName: "",
   listingId: "listing_" + Date.now(),
+  buyerName: "",
+  sellerName: "",
   salePrice: 0,
   escrowFee: 250,
 });

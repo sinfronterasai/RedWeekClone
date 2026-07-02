@@ -1,15 +1,16 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { 
-  insertUserSchema, 
-  insertReviewSchema, 
-  insertBookingSchema, 
-  insertListingSchema, 
+import {
+  insertUserSchema,
+  insertReviewSchema,
+  insertBookingSchema,
+  insertListingSchema,
   insertResortSchema,
   insertSiteSettingSchema,
   insertPropertyInquirySchema,
-  insertEscrowTransactionSchema
+  insertEscrowTransactionSchema,
+  type EscrowTransaction
 } from "@shared/schema";
 import { inventoryService } from "./inventory-service";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
@@ -1101,25 +1102,43 @@ User ID: ${user.id}
     }
   });
 
-  const httpServer = createServer(app);
-
-// TEMP: seed escrow vendor users via HTTP
-const seedVendors = async () => {
-  try {
-    const vendors = [
-      { username: 'concord.title', email: 'escrow@concordtitle.net', password: 'Escrow2026!', firstName: 'Concord', lastName: 'Title', role: 'escrow_vendor' },
-      { username: 'firstam.escrow', email: 'escrow@firstam.com', password: 'Escrow2026!', firstName: 'First American', lastName: 'Title', role: 'escrow_vendor' },
-    ];
-    for (const v of vendors) {
-      const exists = await storage.getUserByUsername(v.username);
-      if (!exists) {
-        await storage.createUser(v as any);
-        console.log('SEEDED:', v.username);
-      }
+  // Customer-facing escrow routes
+  app.get("/api/escrow/my-transactions", authenticateUser, async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ message: "Not authenticated" });
+      const all = await storage.getEscrowTransactions();
+      const userEmail = req.user.email?.toLowerCase();
+      const userFullName = `${req.user.firstName} ${req.user.lastName}`.toLowerCase();
+      const mine = all.filter(tx =>
+        (userEmail && (tx.buyerEmail?.toLowerCase() === userEmail || tx.sellerEmail?.toLowerCase() === userEmail)) ||
+        tx.buyerName.toLowerCase() === userFullName ||
+        tx.sellerName.toLowerCase() === userFullName
+      );
+      res.json(mine);
+    } catch (error) {
+      console.error("Error fetching customer escrow transactions:", error);
+      res.status(500).json({ message: "Failed to fetch your escrow transactions" });
     }
-    console.log('Escrow vendor seed complete');
-  } catch (e) { console.error('Seed error:', e); }
-};
-seedVendors();
+  });
+
+  app.get("/api/escrow/my-transactions/:id", authenticateUser, async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ message: "Not authenticated" });
+      const tx = await storage.getEscrowTransaction(req.params.id);
+      if (!tx) return res.status(404).json({ message: "Transaction not found" });
+      const userEmail = req.user.email?.toLowerCase();
+      const userFullName = `${req.user.firstName} ${req.user.lastName}`.toLowerCase();
+      const isOwner = (userEmail && (tx.buyerEmail?.toLowerCase() === userEmail || tx.sellerEmail?.toLowerCase() === userEmail)) ||
+        tx.buyerName.toLowerCase() === userFullName ||
+        tx.sellerName.toLowerCase() === userFullName;
+      if (!isOwner) return res.status(403).json({ message: "This is not your transaction" });
+      res.json(tx);
+    } catch (error) {
+      console.error("Error fetching customer escrow detail:", error);
+      res.status(500).json({ message: "Failed to fetch transaction" });
+    }
+  });
+
+  const httpServer = createServer(app);
   return httpServer;
 }

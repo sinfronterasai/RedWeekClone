@@ -21,6 +21,8 @@ import EscrowDashboard from "@/pages/escrow/EscrowDashboard";
 import EscrowTransactions from "@/pages/escrow/EscrowTransactions";
 import EscrowTransactionDetail from "@/pages/escrow/EscrowTransactionDetail";
 import EscrowSeedData from "@/pages/escrow/EscrowSeedData";
+import EscrowCustomerDashboard from "@/pages/escrow/EscrowCustomerDashboard";
+import EscrowCustomerDetail from "@/pages/escrow/EscrowCustomerDetail";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -40,6 +42,8 @@ function Router() {
       <Route path="/escrow/transactions" component={EscrowTransactions} />
       <Route path="/escrow/transactions/:id" component={EscrowTransactionDetail} />
       <Route path="/escrow/seed" component={EscrowSeedData} />
+      <Route path="/escrow/my" component={EscrowCustomerDashboard} />
+      <Route path="/escrow/my/:id" component={EscrowCustomerDetail} />
       <Route path="/create-listing" component={CreateListing} />
       <Route path="/forums" component={Forums} />
       <Route path="/contact" component={Contact} />

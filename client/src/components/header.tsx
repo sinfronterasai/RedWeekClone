@@ -49,6 +49,11 @@ export default function Header() {
             <Link href="/forums" data-testid="nav-forums">
               <span className="text-foreground hover:text-primary transition-colors cursor-pointer">Forums</span>
             </Link>
+            {user && (user.role !== 'escrow_vendor' && user.role !== 'admin') && (
+              <Link href="/escrow/my" data-testid="nav-my-escrow">
+                <span className="text-foreground hover:text-primary transition-colors cursor-pointer">My Escrow</span>
+              </Link>
+            )}
             {(user?.role === 'escrow_vendor' || user?.role === 'admin') && (
               <Link href="/escrow/dashboard" data-testid="nav-escrow">
                 <span className="text-foreground hover:text-primary transition-colors cursor-pointer">Escrow Portal</span>
@@ -80,6 +85,13 @@ export default function Header() {
                     <DropdownMenuItem asChild>
                       <Link href="/admin" data-testid="menu-admin">
                         Admin Panel
+                      </Link>
+                    </DropdownMenuItem>
+                  )}
+                  {(user.role !== 'escrow_vendor' && user.role !== 'admin') && (
+                    <DropdownMenuItem asChild>
+                      <Link href="/escrow/my" data-testid="menu-my-escrow">
+                        My Escrow
                       </Link>
                     </DropdownMenuItem>
                   )}
@@ -136,6 +148,11 @@ export default function Header() {
                 <Link href="/forums" data-testid="mobile-nav-forums">
                   <span className="text-foreground hover:text-primary transition-colors block py-2 cursor-pointer">Forums</span>
                 </Link>
+                {user && (user.role !== 'escrow_vendor' && user.role !== 'admin') && (
+                  <Link href="/escrow/my" data-testid="mobile-nav-my-escrow">
+                    <span className="text-foreground hover:text-primary transition-colors block py-2 cursor-pointer">My Escrow</span>
+                  </Link>
+                )}
                 {(user?.role === 'escrow_vendor' || user?.role === 'admin') && (
                   <Link href="/escrow/dashboard" data-testid="mobile-nav-escrow">
                     <span className="text-foreground hover:text-primary transition-colors block py-2 cursor-pointer">Escrow Portal</span>

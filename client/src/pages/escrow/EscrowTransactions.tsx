@@ -97,7 +97,7 @@ export default function EscrowTransactions() {
                         <TableCell>{formatCurrency(tx.escrowFee)}</TableCell>
                         <TableCell>
                           <Badge className={statusColor[tx.status] || ""}>
-                            {tx.status.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+                            {tx.status.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())}
                           </Badge>
                         </TableCell>
                         <TableCell className="text-muted-foreground text-sm">
