@@ -49,6 +49,11 @@ export default function Header() {
             <Link href="/forums" data-testid="nav-forums">
               <span className="text-foreground hover:text-primary transition-colors cursor-pointer">Forums</span>
             </Link>
+            {(user?.role === 'escrow_vendor' || user?.role === 'admin') && (
+              <Link href="/escrow/dashboard" data-testid="nav-escrow">
+                <span className="text-foreground hover:text-primary transition-colors cursor-pointer">Escrow Portal</span>
+              </Link>
+            )}
           </nav>
           
           {/* Auth Buttons or User Menu */}
@@ -75,6 +80,13 @@ export default function Header() {
                     <DropdownMenuItem asChild>
                       <Link href="/admin" data-testid="menu-admin">
                         Admin Panel
+                      </Link>
+                    </DropdownMenuItem>
+                  )}
+                  {(user.role === 'escrow_vendor' || user.role === 'admin') && (
+                    <DropdownMenuItem asChild>
+                      <Link href="/escrow/dashboard" data-testid="menu-escrow">
+                        Escrow Portal
                       </Link>
                     </DropdownMenuItem>
                   )}
@@ -124,6 +136,11 @@ export default function Header() {
                 <Link href="/forums" data-testid="mobile-nav-forums">
                   <span className="text-foreground hover:text-primary transition-colors block py-2 cursor-pointer">Forums</span>
                 </Link>
+                {(user?.role === 'escrow_vendor' || user?.role === 'admin') && (
+                  <Link href="/escrow/dashboard" data-testid="mobile-nav-escrow">
+                    <span className="text-foreground hover:text-primary transition-colors block py-2 cursor-pointer">Escrow Portal</span>
+                  </Link>
+                )}
                 <div className="pt-4 border-t">
                   <Link href="/auth?mode=signin" data-testid="mobile-button-signin">
                     <Button variant="outline" className="w-full mb-2">

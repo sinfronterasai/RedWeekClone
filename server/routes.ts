@@ -8,11 +8,12 @@ import {
   insertListingSchema, 
   insertResortSchema,
   insertSiteSettingSchema,
-  insertPropertyInquirySchema
+  insertPropertyInquirySchema,
+  insertEscrowTransactionSchema
 } from "@shared/schema";
 import { inventoryService } from "./inventory-service";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
-import { authenticateUser, requireAdmin, requireAuth } from "./middleware";
+import { authenticateUser, requireAdmin, requireAuth, requireEscrowVendor } from "./middleware";
 import { z } from "zod";
 import nodemailer from "nodemailer";
 
@@ -1013,6 +1014,112 @@ User ID: ${user.id}
     }
   });
 
+  // Escrow vendor portal routes
+  app.get("/api/escrow/dashboard", authenticateUser, requireEscrowVendor, async (req, res) => {
+    try {
+      const stats = await storage.getEscrowDashboardStats();
+      res.json(stats);
+    } catch (error) {
+      console.error("Error fetching escrow dashboard:", error);
+      res.status(500).json({ message: "Failed to fetch escrow dashboard stats" });
+    }
+  });
+
+  app.get("/api/escrow/transactions", authenticateUser, requireEscrowVendor, async (req, res) => {
+    try {
+      const { status } = req.query;
+      const transactions = await storage.getEscrowTransactions(typeof status === 'string' ? status : undefined);
+      res.json(transactions);
+    } catch (error) {
+      console.error("Error fetching escrow transactions:", error);
+      res.status(500).json({ message: "Failed to fetch escrow transactions" });
+    }
+  });
+
+  app.get("/api/escrow/transactions/:id", authenticateUser, requireEscrowVendor, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const transaction = await storage.getEscrowTransaction(id);
+      if (!transaction) {
+        return res.status(404).json({ message: "Escrow transaction not found" });
+      }
+      res.json(transaction);
+    } catch (error) {
+      console.error("Error fetching escrow transaction:", error);
+      res.status(500).json({ message: "Failed to fetch escrow transaction" });
+    }
+  });
+
+  app.post("/api/escrow/transactions", authenticateUser, requireEscrowVendor, async (req, res) => {
+    try {
+      const validatedData = insertEscrowTransactionSchema.parse(req.body);
+      const transaction = await storage.createEscrowTransaction(validatedData);
+      res.status(201).json(transaction);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid escrow transaction data", errors: error.errors });
+      }
+      console.error("Error creating escrow transaction:", error);
+      res.status(500).json({ message: "Failed to create escrow transaction" });
+    }
+  });
+
+  app.post("/api/escrow/transactions/seed", authenticateUser, requireEscrowVendor, async (req, res) => {
+    try {
+      const { transactions } = req.body;
+      if (!transactions || !Array.isArray(transactions) || transactions.length === 0) {
+        return res.status(400).json({ message: "transactions array is required" });
+      }
+      const created: EscrowTransaction[] = [];
+      for (const tx of transactions) {
+        const validated = insertEscrowTransactionSchema.parse(tx);
+        const result = await storage.createEscrowTransaction(validated);
+        created.push(result);
+      }
+      res.status(201).json({ created: created.length, transactions: created });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid escrow transaction data", errors: error.errors });
+      }
+      console.error("Error seeding escrow transactions:", error);
+      res.status(500).json({ message: "Failed to seed escrow transactions" });
+    }
+  });
+
+  app.patch("/api/escrow/transactions/:id", authenticateUser, requireEscrowVendor, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const updateData = req.body;
+      const updated = await storage.updateEscrowTransaction(id, updateData);
+      if (!updated) {
+        return res.status(404).json({ message: "Escrow transaction not found" });
+      }
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating escrow transaction:", error);
+      res.status(500).json({ message: "Failed to update escrow transaction" });
+    }
+  });
+
   const httpServer = createServer(app);
+
+// TEMP: seed escrow vendor users via HTTP
+const seedVendors = async () => {
+  try {
+    const vendors = [
+      { username: 'concord.title', email: 'escrow@concordtitle.net', password: 'Escrow2026!', firstName: 'Concord', lastName: 'Title', role: 'escrow_vendor' },
+      { username: 'firstam.escrow', email: 'escrow@firstam.com', password: 'Escrow2026!', firstName: 'First American', lastName: 'Title', role: 'escrow_vendor' },
+    ];
+    for (const v of vendors) {
+      const exists = await storage.getUserByUsername(v.username);
+      if (!exists) {
+        await storage.createUser(v as any);
+        console.log('SEEDED:', v.username);
+      }
+    }
+    console.log('Escrow vendor seed complete');
+  } catch (e) { console.error('Seed error:', e); }
+};
+seedVendors();
   return httpServer;
 }

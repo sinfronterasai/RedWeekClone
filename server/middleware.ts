@@ -62,6 +62,18 @@ export const requireAdmin = (req: Request, res: Response, next: NextFunction) =>
   next();
 };
 
+export const requireEscrowVendor = (req: Request, res: Response, next: NextFunction) => {
+  if (!req.user) {
+    return res.status(401).json({ message: 'Not authenticated' });
+  }
+
+  if (req.user.role !== 'escrow_vendor' && req.user.role !== 'admin') {
+    return res.status(403).json({ message: 'Forbidden: Escrow vendor access required' });
+  }
+
+  next();
+};
+
 export const requireAuth = (req: Request, res: Response, next: NextFunction) => {
   if (!req.user) {
     return res.status(401).json({ message: 'Authentication required' });

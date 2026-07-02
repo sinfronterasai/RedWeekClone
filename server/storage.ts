@@ -1,11 +1,14 @@
 import { type User, type InsertUser, type Resort, type InsertResort, type Review, type InsertReview, type Booking, type InsertBooking, type Listing, type InsertListing } from "@shared/schema";
 import { randomUUID } from "crypto";
 
-import type { 
-  SiteSetting, 
-  InsertSiteSetting, 
-  PropertyInquiry, 
-  InsertPropertyInquiry 
+import type {
+  SiteSetting,
+  InsertSiteSetting,
+  PropertyInquiry,
+  InsertPropertyInquiry,
+  EscrowTransaction,
+  InsertEscrowTransaction,
+  EscrowDashboardStats
 } from "@shared/schema";
 
 export interface IStorage {
@@ -53,6 +56,14 @@ export interface IStorage {
   createPropertyInquiry(inquiry: InsertPropertyInquiry): Promise<PropertyInquiry>;
   updatePropertyInquiry(id: string, updateData: Partial<Omit<PropertyInquiry, 'id' | 'createdAt'>>): Promise<PropertyInquiry | undefined>;
 
+  // Escrow Transaction methods
+  getEscrowTransactions(status?: string): Promise<EscrowTransaction[]>;
+  getEscrowTransaction(id: string): Promise<EscrowTransaction | undefined>;
+  createEscrowTransaction(tx: InsertEscrowTransaction): Promise<EscrowTransaction>;
+  updateEscrowTransaction(id: string, updateData: Partial<EscrowTransaction>): Promise<EscrowTransaction | undefined>;
+  getEscrowTransactionsByListing(listingId: string): Promise<EscrowTransaction[]>;
+  getEscrowDashboardStats(): Promise<EscrowDashboardStats>;
+
   // Database seeding
   seedData?(): Promise<void>;
 }
@@ -63,6 +74,7 @@ export class MemStorage implements IStorage {
   private reviews: Map<string, Review>;
   private bookings: Map<string, Booking>;
   private listings: Map<string, Listing>;
+  private escrowTransactions: Map<string, EscrowTransaction>;
 
   constructor() {
     this.users = new Map();
@@ -70,6 +82,7 @@ export class MemStorage implements IStorage {
     this.reviews = new Map();
     this.bookings = new Map();
     this.listings = new Map();
+    this.escrowTransactions = new Map();
     this.seedData().then(() => this.migrateUserData());
   }
 
@@ -251,6 +264,33 @@ export class MemStorage implements IStorage {
       };
       this.users.set(adminUser.id, adminUser);
       console.log('Created admin user: admin / admin@tailoredtimeshare.com');
+
+      // Create escrow vendor demo users
+      const concordUser = {
+        id: 'escrow-vendor-1',
+        username: 'concord.title',
+        email: 'escrow@concordtitle.net',
+        password: 'Escrow2026!',
+        firstName: 'Concord',
+        lastName: 'Title',
+        role: 'escrow_vendor',
+        createdAt: new Date()
+      };
+      this.users.set(concordUser.id, concordUser);
+      console.log('Created escrow vendor: concord.title / escrow@concordtitle.net');
+
+      const firstAmUser = {
+        id: 'escrow-vendor-2',
+        username: 'firstam.escrow',
+        email: 'escrow@firstam.com',
+        password: 'Escrow2026!',
+        firstName: 'First American',
+        lastName: 'Title',
+        role: 'escrow_vendor',
+        createdAt: new Date()
+      };
+      this.users.set(firstAmUser.id, firstAmUser);
+      console.log('Created escrow vendor: firstam.escrow / escrow@firstam.com');
     }
   }
 
@@ -461,6 +501,97 @@ export class MemStorage implements IStorage {
 
   async deleteSiteSetting(key: string): Promise<boolean> {
     return false;
+  }
+
+  // Escrow Transaction methods (stub implementations for MemStorage)
+  async getEscrowTransactions(status?: string): Promise<EscrowTransaction[]> {
+    const all = Array.from(this.escrowTransactions.values());
+    const filtered = status ? all.filter(t => t.status === status) : all;
+    return filtered.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }
+
+  async getEscrowTransaction(id: string): Promise<EscrowTransaction | undefined> {
+    return this.escrowTransactions.get(id);
+  }
+
+  async createEscrowTransaction(tx: InsertEscrowTransaction): Promise<EscrowTransaction> {
+    const id = randomUUID();
+    const defaultMilestones = [
+      { label: "Escrow Initiated", completedAt: new Date().toISOString(), notes: "" },
+      { label: "Documents Review", completedAt: null, notes: "" },
+      { label: "Funds Received", completedAt: null, notes: "" },
+      { label: "Closing Process", completedAt: null, notes: "" },
+      { label: "Transaction Completed", completedAt: null, notes: "" },
+    ];
+    const escrowTx: EscrowTransaction = {
+      ...tx,
+      id,
+      milestones: tx.milestones?.length ? tx.milestones : defaultMilestones,
+      documents: tx.documents || [],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      closedAt: null,
+    };
+    this.escrowTransactions.set(id, escrowTx);
+    return escrowTx;
+  }
+
+  async updateEscrowTransaction(id: string, updateData: Partial<EscrowTransaction>): Promise<EscrowTransaction | undefined> {
+    const existing = this.escrowTransactions.get(id);
+    if (!existing) return undefined;
+    const updated: EscrowTransaction = {
+      ...existing,
+      ...updateData,
+      updatedAt: new Date().toISOString(),
+      closedAt: updateData.status === 'completed' ? new Date().toISOString() : existing.closedAt,
+    };
+    this.escrowTransactions.set(id, updated);
+    return updated;
+  }
+
+  async getEscrowTransactionsByListing(listingId: string): Promise<EscrowTransaction[]> {
+    return Array.from(this.escrowTransactions.values())
+      .filter(t => t.listingId === listingId)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }
+
+  async getEscrowDashboardStats(): Promise<EscrowDashboardStats> {
+    const all = Array.from(this.escrowTransactions.values());
+    const active = all.filter(t => t.status !== 'completed');
+    const completed = all.filter(t => t.status === 'completed');
+    const now = new Date();
+    const thisMonth = completed.filter(t => {
+      if (!t.closedAt) return false;
+      const d = new Date(t.closedAt);
+      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+    });
+    const avgCloseDays = completed.length > 0
+      ? completed.reduce((sum, t) => {
+          const start = new Date(t.createdAt).getTime();
+          const end = new Date(t.closedAt || t.updatedAt).getTime();
+          return sum + (end - start) / (1000 * 60 * 60 * 24);
+        }, 0) / completed.length
+      : 0;
+
+    const months: { month: string; count: number; volume: number }[] = [];
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      const monthTxs = all.filter(t => {
+        const td = new Date(t.createdAt);
+        return td.getMonth() === d.getMonth() && td.getFullYear() === d.getFullYear();
+      });
+      months.push({ month: key, count: monthTxs.length, volume: monthTxs.reduce((s, t) => s + t.salePrice, 0) });
+    }
+
+    return {
+      activeTransactions: active.length,
+      totalFundsInEscrow: active.reduce((s, t) => s + t.salePrice, 0),
+      completedThisMonth: thisMonth.length,
+      averageCloseTimeDays: Math.round(avgCloseDays * 10) / 10,
+      monthlyVolume: months,
+      recentTransactions: all.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 5),
+    };
   }
 
   // Property Inquiry methods (stub implementations for MemStorage)

@@ -450,6 +450,165 @@ export class DatabaseStorage implements IStorage {
     return this.mapPropertyInquiryFromDb(result as any);
   }
 
+  // Escrow Transaction methods
+  private mapEscrowFromDb(doc: any): EscrowTransaction {
+    return {
+      id: doc._id?.toString() || doc.id,
+      listingId: doc.listingId,
+      propertyName: doc.propertyName,
+      buyerName: doc.buyerName,
+      buyerEmail: doc.buyerEmail,
+      sellerName: doc.sellerName,
+      sellerEmail: doc.sellerEmail,
+      salePrice: doc.salePrice,
+      escrowFee: doc.escrowFee,
+      status: doc.status,
+      milestones: doc.milestones || [],
+      documents: doc.documents || [],
+      createdAt: doc.createdAt instanceof Date ? doc.createdAt.toISOString() : doc.createdAt,
+      updatedAt: doc.updatedAt instanceof Date ? doc.updatedAt.toISOString() : doc.updatedAt,
+      closedAt: doc.closedAt instanceof Date ? doc.closedAt.toISOString() : doc.closedAt || null,
+    };
+  }
+
+  async getEscrowTransactions(status?: string): Promise<EscrowTransaction[]> {
+    const db = await getDb();
+    const filter: any = {};
+    if (status) filter.status = status;
+    const docs = await db.collection('escrow_transactions')
+      .find(filter)
+      .sort({ createdAt: -1 })
+      .toArray();
+    return docs.map(d => this.mapEscrowFromDb(d));
+  }
+
+  async getEscrowTransaction(id: string): Promise<EscrowTransaction | undefined> {
+    const db = await getDb();
+    let doc = null;
+    try {
+      doc = await db.collection('escrow_transactions').findOne({ _id: new ObjectId(id) });
+    } catch (e) { /* not a valid ObjectId */ }
+    if (!doc) {
+      doc = await db.collection('escrow_transactions').findOne({
+        $or: [{ _id: id }, { id: id }]
+      });
+    }
+    if (!doc) return undefined;
+    return this.mapEscrowFromDb(doc);
+  }
+
+  async createEscrowTransaction(tx: InsertEscrowTransaction): Promise<EscrowTransaction> {
+    const db = await getDb();
+    const defaultMilestones = [
+      { label: "Escrow Initiated", completedAt: new Date().toISOString(), notes: "" },
+      { label: "Documents Review", completedAt: null, notes: "" },
+      { label: "Funds Received", completedAt: null, notes: "" },
+      { label: "Closing Process", completedAt: null, notes: "" },
+      { label: "Transaction Completed", completedAt: null, notes: "" },
+    ];
+    const doc = {
+      ...tx,
+      milestones: tx.milestones?.length ? tx.milestones : defaultMilestones,
+      documents: tx.documents || [],
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      closedAt: null,
+    };
+    const result = await db.collection('escrow_transactions').insertOne(doc);
+    return {
+      ...tx,
+      id: result.insertedId.toString(),
+      milestones: doc.milestones,
+      documents: doc.documents,
+      createdAt: doc.createdAt.toISOString(),
+      updatedAt: doc.updatedAt.toISOString(),
+      closedAt: null,
+    };
+  }
+
+  async updateEscrowTransaction(id: string, updateData: Partial<EscrowTransaction>): Promise<EscrowTransaction | undefined> {
+    const db = await getDb();
+    const setFields: any = { ...updateData, updatedAt: new Date() };
+    if (updateData.status === 'completed') {
+      setFields.closedAt = new Date();
+    }
+    // Remove id from updateData if present
+    delete setFields.id;
+    delete setFields.createdAt;
+
+    let result = null;
+    try {
+      result = await db.collection('escrow_transactions').findOneAndUpdate(
+        { _id: new ObjectId(id) },
+        { $set: setFields },
+        { returnDocument: 'after' }
+      );
+    } catch (e) {
+      result = await db.collection('escrow_transactions').findOneAndUpdate(
+        { $or: [{ _id: id }, { id: id }] },
+        { $set: setFields },
+        { returnDocument: 'after' }
+      );
+    }
+    if (!result) return undefined;
+    return this.mapEscrowFromDb(result);
+  }
+
+  async getEscrowTransactionsByListing(listingId: string): Promise<EscrowTransaction[]> {
+    const db = await getDb();
+    const docs = await db.collection('escrow_transactions')
+      .find({ listingId })
+      .sort({ createdAt: -1 })
+      .toArray();
+    return docs.map(d => this.mapEscrowFromDb(d));
+  }
+
+  async getEscrowDashboardStats(): Promise<EscrowDashboardStats> {
+    const db = await getDb();
+    const all = await db.collection('escrow_transactions').find({}).toArray();
+    const active = all.filter(t => t.status !== 'completed');
+    const completed = all.filter(t => t.status === 'completed');
+    const now = new Date();
+    const thisMonth = completed.filter(t => {
+      if (!t.closedAt) return false;
+      const d = t.closedAt instanceof Date ? t.closedAt : new Date(t.closedAt);
+      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+    });
+    const avgCloseDays = completed.length > 0
+      ? completed.reduce((sum, t) => {
+          const start = t.createdAt instanceof Date ? t.createdAt.getTime() : new Date(t.createdAt).getTime();
+          const end = t.closedAt instanceof Date ? t.closedAt.getTime() : new Date(t.closedAt || t.updatedAt).getTime();
+          return sum + (end - start) / (1000 * 60 * 60 * 24);
+        }, 0) / completed.length
+      : 0;
+
+    const months: { month: string; count: number; volume: number }[] = [];
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      const monthTxs = all.filter(t => {
+        const td = t.createdAt instanceof Date ? t.createdAt : new Date(t.createdAt);
+        return td.getMonth() === d.getMonth() && td.getFullYear() === d.getFullYear();
+      });
+      months.push({ month: key, count: monthTxs.length, volume: monthTxs.reduce((s: number, t: any) => s + t.salePrice, 0) });
+    }
+
+    const sorted = all.sort((a, b) => {
+      const da = a.createdAt instanceof Date ? a.createdAt.getTime() : new Date(a.createdAt).getTime();
+      const db_ = b.createdAt instanceof Date ? b.createdAt.getTime() : new Date(b.createdAt).getTime();
+      return db_ - da;
+    });
+
+    return {
+      activeTransactions: active.length,
+      totalFundsInEscrow: active.reduce((s, t) => s + t.salePrice, 0),
+      completedThisMonth: thisMonth.length,
+      averageCloseTimeDays: Math.round(avgCloseDays * 10) / 10,
+      monthlyVolume: months,
+      recentTransactions: sorted.slice(0, 5).map(d => this.mapEscrowFromDb(d)),
+    };
+  }
+
   // Seed data for initial setup
   async seedData(): Promise<void> {
     const db = await getDb();
@@ -570,6 +729,26 @@ export class DatabaseStorage implements IStorage {
           role: 'admin'
         });
         console.log('Created admin user: admin / admin@tailoredtimeshare.com');
+
+        await this.createUser({
+          username: 'concord.title',
+          email: 'escrow@concordtitle.net',
+          password: 'Escrow2026!',
+          firstName: 'Concord',
+          lastName: 'Title',
+          role: 'escrow_vendor'
+        });
+        console.log('Created escrow vendor: concord.title / escrow@concordtitle.net');
+
+        await this.createUser({
+          username: 'firstam.escrow',
+          email: 'escrow@firstam.com',
+          password: 'Escrow2026!',
+          firstName: 'First American',
+          lastName: 'Title',
+          role: 'escrow_vendor'
+        });
+        console.log('Created escrow vendor: firstam.escrow / escrow@firstam.com');
       } catch (error) {
         console.log('Test users may already exist, skipping creation');
       }

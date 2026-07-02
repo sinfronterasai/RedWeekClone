@@ -140,3 +140,45 @@ export type PropertyInquiry = InsertPropertyInquiry & {
   status: string;
   createdAt: Date;
 };
+
+// Escrow Transaction Schema
+export const insertEscrowTransactionSchema = z.object({
+  listingId: z.string().min(1, "Listing ID is required"),
+  propertyName: z.string().min(1, "Property name is required"),
+  buyerName: z.string().min(1, "Buyer name is required"),
+  buyerEmail: z.string().email().optional(),
+  sellerName: z.string().min(1, "Seller name is required"),
+  sellerEmail: z.string().email().optional(),
+  salePrice: z.number().positive("Sale price must be positive"),
+  escrowFee: z.number().positive("Escrow fee must be positive"),
+  status: z.enum(["initiated", "documents_review", "funds_received", "closing", "completed"]).default("initiated"),
+  milestones: z.array(z.object({
+    label: z.string(),
+    completedAt: z.string().nullable(),
+    notes: z.string().optional(),
+  })).default([]),
+  documents: z.array(z.object({
+    name: z.string(),
+    url: z.string(),
+    uploadedAt: z.string(),
+  })).default([]),
+});
+
+export type EscrowTransaction = z.infer<typeof insertEscrowTransactionSchema> & {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+  closedAt: string | null;
+};
+
+export type InsertEscrowTransaction = z.infer<typeof insertEscrowTransactionSchema>;
+
+// Escrow Dashboard Stats
+export type EscrowDashboardStats = {
+  activeTransactions: number;
+  totalFundsInEscrow: number;
+  completedThisMonth: number;
+  averageCloseTimeDays: number;
+  monthlyVolume: { month: string; count: number; volume: number }[];
+  recentTransactions: EscrowTransaction[];
+};

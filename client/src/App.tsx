@@ -17,6 +17,10 @@ import AdminInventory from "@/pages/admin-inventory";
 import CreateListing from "@/pages/create-listing";
 import Forums from "@/pages/forums";
 import Contact from "@/pages/contact";
+import EscrowDashboard from "@/pages/escrow/EscrowDashboard";
+import EscrowTransactions from "@/pages/escrow/EscrowTransactions";
+import EscrowTransactionDetail from "@/pages/escrow/EscrowTransactionDetail";
+import EscrowSeedData from "@/pages/escrow/EscrowSeedData";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -32,6 +36,10 @@ function Router() {
       <Route path="/admin/resorts" component={AdminResorts} />
       <Route path="/admin/settings" component={AdminSettings} />
       <Route path="/admin/inventory" component={AdminInventory} />
+      <Route path="/escrow/dashboard" component={EscrowDashboard} />
+      <Route path="/escrow/transactions" component={EscrowTransactions} />
+      <Route path="/escrow/transactions/:id" component={EscrowTransactionDetail} />
+      <Route path="/escrow/seed" component={EscrowSeedData} />
       <Route path="/create-listing" component={CreateListing} />
       <Route path="/forums" component={Forums} />
       <Route path="/contact" component={Contact} />
