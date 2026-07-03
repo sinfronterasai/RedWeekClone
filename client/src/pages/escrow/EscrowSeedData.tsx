@@ -42,7 +42,7 @@ export default function EscrowSeedData() {
 
   const seedMutation = useMutation({
     mutationFn: async (transactions: MockTx[]) => {
-      const res = await apiRequest("POST", "/api/escrow/seed", transactions);
+      const res = await apiRequest("POST", "/api/escrow/transactions/seed", { transactions });
       return res.json();
     },
     onSuccess: (data: any) => {
