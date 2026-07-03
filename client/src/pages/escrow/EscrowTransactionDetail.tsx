@@ -1,5 +1,6 @@
+import { useState, useRef } from "react";
 import { useLocation, useParams } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import Header from "@/components/header";
 import Footer from "@/components/footer";
@@ -7,7 +8,8 @@ import EscrowProtectedRoute from "@/components/EscrowProtectedRoute";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, CheckCircle, Circle, FileText } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { ArrowLeft, CheckCircle, Circle, FileText, Upload } from "lucide-react";
 
 const formatCurrency = (n: number) =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(n);
@@ -23,6 +25,10 @@ const statusColor: Record<string, string> = {
 export default function EscrowTransactionDetail() {
   const [, setLocation] = useLocation();
   const { id } = useParams();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: tx, isLoading } = useQuery({
     queryKey: ['/api/escrow/transactions', id],
@@ -32,6 +38,45 @@ export default function EscrowTransactionDetail() {
     },
     enabled: !!id,
   });
+
+  const uploadMutation = useMutation({
+    mutationFn: async ({ name, dataUrl }: { name: string; dataUrl: string }) => {
+      const res = await apiRequest("POST", `/api/escrow/transactions/${id}/documents`, { name, dataUrl });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/escrow/transactions', id] });
+      toast({ title: "Document uploaded", description: "Document has been added to this transaction." });
+      setIsUploading(false);
+    },
+    onError: (error: any) => {
+      toast({ title: "Upload failed", description: error.message || "Failed to upload document", variant: "destructive" });
+      setIsUploading(false);
+    },
+  });
+
+  const handleUploadClick = () => {
+    setIsUploading(true);
+    fileInputRef.current?.click();
+  };
+
+  const handleFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) {
+      setIsUploading(false);
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      uploadMutation.mutate({ name: file.name, dataUrl: reader.result as string });
+    };
+    reader.onerror = () => {
+      toast({ title: "Read error", description: "Failed to read file", variant: "destructive" });
+      setIsUploading(false);
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -154,8 +199,21 @@ export default function EscrowTransactionDetail() {
               {/* Documents */}
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-lg">Documents</CardTitle>
-                  <CardDescription>Files associated with this escrow</CardDescription>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle className="text-lg">Documents</CardTitle>
+                      <CardDescription>Files associated with this escrow</CardDescription>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleUploadClick}
+                      disabled={uploadMutation.isPending}
+                    >
+                      <Upload className="h-4 w-4 mr-1" />
+                      {isUploading && uploadMutation.isPending ? "Uploading..." : "Upload"}
+                    </Button>
+                  </div>
                 </CardHeader>
                 <CardContent>
                   {tx.documents && tx.documents.length > 0 ? (
@@ -194,6 +252,13 @@ export default function EscrowTransactionDetail() {
           )}
         </div>
       </EscrowProtectedRoute>
+      <input
+        type="file"
+        ref={fileInputRef}
+        className="hidden"
+        onChange={handleFileSelected}
+        accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.txt,.csv"
+      />
       <Footer />
     </div>
   );

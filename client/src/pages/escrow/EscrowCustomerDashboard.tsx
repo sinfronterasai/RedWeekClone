@@ -1,15 +1,17 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useAuth } from "@/lib/auth";
 import { useLocation } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import Header from "@/components/header";
 import Footer from "@/components/footer";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { DollarSign, FileText, Clock, CheckCircle, Circle, ChevronDown, ChevronUp, ShieldCheck } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { DollarSign, FileText, Clock, CheckCircle, Circle, ChevronDown, ChevronUp, ShieldCheck, Upload } from "lucide-react";
 
 const formatCurrency = (n: number) =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(n);
@@ -25,7 +27,11 @@ const statusColor: Record<string, string> = {
 export default function EscrowCustomerDashboard() {
   const { user, isLoading: authLoading } = useAuth();
   const [, setLocation] = useLocation();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [uploadingFor, setUploadingFor] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: transactions, isLoading } = useQuery({
     queryKey: ['/api/escrow/my-transactions'],
@@ -57,6 +63,47 @@ export default function EscrowCustomerDashboard() {
 
   const toggleExpand = (id: string) => {
     setExpandedId(expandedId === id ? null : id);
+  };
+
+  const uploadMutation = useMutation({
+    mutationFn: async ({ txId, name, dataUrl }: { txId: string; name: string; dataUrl: string }) => {
+      const res = await apiRequest("POST", `/api/escrow/my-transactions/${txId}/documents`, { name, dataUrl });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/escrow/my-transactions'] });
+      toast({ title: "Document uploaded", description: "Your document has been added to the transaction." });
+      setUploadingFor(null);
+    },
+    onError: (error: any) => {
+      toast({ title: "Upload failed", description: error.message || "Failed to upload document", variant: "destructive" });
+      setUploadingFor(null);
+    },
+  });
+
+  const handleUploadClick = (txId: string) => {
+    setUploadingFor(txId);
+    fileInputRef.current?.click();
+  };
+
+  const handleFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !uploadingFor) {
+      setUploadingFor(null);
+      return;
+    }
+    const txId = uploadingFor;
+    const reader = new FileReader();
+    reader.onload = () => {
+      uploadMutation.mutate({ txId, name: file.name, dataUrl: reader.result as string });
+    };
+    reader.onerror = () => {
+      toast({ title: "Read error", description: "Failed to read file", variant: "destructive" });
+      setUploadingFor(null);
+    };
+    reader.readAsDataURL(file);
+    // Reset the input so the same file can be re-selected if needed
+    e.target.value = '';
   };
 
   return (
@@ -292,10 +339,21 @@ export default function EscrowCustomerDashboard() {
 
                                   {/* Documents */}
                                   <div>
-                                    <h4 className="font-semibold text-sm mb-3 flex items-center gap-2">
-                                      <FileText className="h-4 w-4 text-muted-foreground" />
-                                      Documents &amp; Paperwork
-                                    </h4>
+                                    <div className="flex items-center justify-between mb-3">
+                                      <h4 className="font-semibold text-sm flex items-center gap-2">
+                                        <FileText className="h-4 w-4 text-muted-foreground" />
+                                        Documents &amp; Paperwork
+                                      </h4>
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => handleUploadClick(tx.id)}
+                                        disabled={uploadMutation.isPending}
+                                      >
+                                        <Upload className="h-4 w-4 mr-1" />
+                                        {uploadingFor === tx.id && uploadMutation.isPending ? "Uploading..." : "Upload"}
+                                      </Button>
+                                    </div>
                                     {tx.documents && tx.documents.length > 0 ? (
                                       <div className="space-y-2">
                                         {tx.documents.map((doc: any, idx: number) => (
@@ -345,6 +403,13 @@ export default function EscrowCustomerDashboard() {
           </CardContent>
         </Card>
       </div>
+      <input
+        type="file"
+        ref={fileInputRef}
+        className="hidden"
+        onChange={handleFileSelected}
+        accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.txt,.csv"
+      />
       <Footer />
     </div>
   );

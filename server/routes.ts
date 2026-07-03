@@ -1102,6 +1102,51 @@ User ID: ${user.id}
     }
   });
 
+  // Vendor document upload
+  app.post("/api/escrow/transactions/:id/documents", authenticateUser, async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ message: "Not authenticated" });
+      const tx = await storage.getEscrowTransaction(req.params.id);
+      if (!tx) return res.status(404).json({ message: "Transaction not found" });
+
+      const { name, dataUrl } = req.body;
+      if (!name || !dataUrl) {
+        return res.status(400).json({ message: "name and dataUrl are required" });
+      }
+
+      // Extract base64 data from data URL
+      const matches = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+      if (!matches) {
+        return res.status(400).json({ message: "Invalid data URL format" });
+      }
+      const mimeType = matches[1];
+      const base64Data = matches[2];
+      const fileBuffer = Buffer.from(base64Data, 'base64');
+
+      // Upload to Cloudinary
+      const objectStorageService = new ObjectStorageService();
+      const uploadResult = await objectStorageService.uploadFile(
+        fileBuffer,
+        'escrow-documents',
+        `${req.params.id}/${name.replace(/[^a-zA-Z0-9._-]/g, '_')}`,
+        { resource_type: 'raw' }
+      );
+
+      // Add document to transaction
+      const newDoc = {
+        name,
+        url: uploadResult.secure_url,
+        uploadedAt: new Date(),
+      };
+      const docs = [...(tx.documents || []), newDoc];
+      const updated = await storage.updateEscrowTransaction(req.params.id, { documents: docs } as any);
+      res.json({ document: newDoc, transaction: updated });
+    } catch (error) {
+      console.error("Error uploading document:", error);
+      res.status(500).json({ message: "Failed to upload document" });
+    }
+  });
+
   // Customer-facing escrow routes
   app.get("/api/escrow/my-transactions", authenticateUser, async (req, res) => {
     try {
@@ -1136,6 +1181,59 @@ User ID: ${user.id}
     } catch (error) {
       console.error("Error fetching customer escrow detail:", error);
       res.status(500).json({ message: "Failed to fetch transaction" });
+    }
+  });
+
+  // Customer document upload
+  app.post("/api/escrow/my-transactions/:id/documents", authenticateUser, async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ message: "Not authenticated" });
+      const tx = await storage.getEscrowTransaction(req.params.id);
+      if (!tx) return res.status(404).json({ message: "Transaction not found" });
+
+      // Verify ownership
+      const userEmail = req.user.email?.toLowerCase();
+      const userFullName = `${req.user.firstName} ${req.user.lastName}`.toLowerCase();
+      const isOwner = (userEmail && (tx.buyerEmail?.toLowerCase() === userEmail || tx.sellerEmail?.toLowerCase() === userEmail)) ||
+        tx.buyerName.toLowerCase() === userFullName ||
+        tx.sellerName.toLowerCase() === userFullName;
+      if (!isOwner) return res.status(403).json({ message: "This is not your transaction" });
+
+      const { name, dataUrl } = req.body;
+      if (!name || !dataUrl) {
+        return res.status(400).json({ message: "name and dataUrl are required" });
+      }
+
+      // Extract base64 data
+      const matches = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+      if (!matches) {
+        return res.status(400).json({ message: "Invalid data URL format" });
+      }
+      const mimeType = matches[1];
+      const base64Data = matches[2];
+      const fileBuffer = Buffer.from(base64Data, 'base64');
+
+      // Upload to Cloudinary
+      const objectStorageService = new ObjectStorageService();
+      const uploadResult = await objectStorageService.uploadFile(
+        fileBuffer,
+        'escrow-documents',
+        `${req.params.id}/${name.replace(/[^a-zA-Z0-9._-]/g, '_')}`,
+        { resource_type: 'raw' }
+      );
+
+      // Add document to transaction
+      const newDoc = {
+        name,
+        url: uploadResult.secure_url,
+        uploadedAt: new Date(),
+      };
+      const docs = [...(tx.documents || []), newDoc];
+      await storage.updateEscrowTransaction(req.params.id, { documents: docs } as any);
+      res.json({ document: newDoc });
+    } catch (error) {
+      console.error("Error uploading document:", error);
+      res.status(500).json({ message: "Failed to upload document" });
     }
   });
 
