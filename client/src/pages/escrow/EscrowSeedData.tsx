@@ -41,27 +41,6 @@ export default function EscrowSeedData() {
   const { toast } = useToast();
   const [entries, setEntries] = useState<MockTx[]>([emptyTx()]);
 
-  if (authLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <p className="text-muted-foreground">Loading...</p>
-      </div>
-    );
-  }
-
-  if (!user) {
-    return (
-      <div className="min-h-screen bg-background">
-        <Header />
-        <div className="max-w-4xl mx-auto px-4 py-16 text-center">
-          <p className="text-lg text-muted-foreground mb-4">Please sign in to access the seed data tool.</p>
-          <a href="/auth"><Button>Sign In</Button></a>
-        </div>
-        <Footer />
-      </div>
-    );
-  }
-
   const seedMutation = useMutation({
     mutationFn: async (transactions: MockTx[]) => {
       const res = await apiRequest("POST", "/api/escrow/transactions/seed", { transactions });
@@ -98,6 +77,27 @@ export default function EscrowSeedData() {
   };
 
   const handleQuickSeed = () => seedMutation.mutate(quickSeedData);
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <p className="text-muted-foreground">Loading...</p>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Header />
+        <div className="max-w-4xl mx-auto px-4 py-16 text-center">
+          <p className="text-lg text-muted-foreground mb-4">Please sign in to access the seed data tool.</p>
+          <a href="/auth"><Button>Sign In</Button></a>
+        </div>
+        <Footer />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">
