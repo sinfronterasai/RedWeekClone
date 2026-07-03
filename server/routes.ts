@@ -1065,7 +1065,7 @@ User ID: ${user.id}
     }
   });
 
-  app.post("/api/escrow/transactions/seed", authenticateUser, requireEscrowVendor, async (req, res) => {
+  app.post("/api/escrow/transactions/seed", authenticateUser, async (req, res) => {
     try {
       const { transactions } = req.body;
       if (!transactions || !Array.isArray(transactions) || transactions.length === 0) {
